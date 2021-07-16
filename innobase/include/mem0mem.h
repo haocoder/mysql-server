@@ -19,7 +19,7 @@ Created 6/9/1994 Heikki Tuuri
 #include "mach0data.h"
 
 /* -------------------- MEMORY HEAPS ----------------------------- */
-
+// 用于动态内存管理，由不同大小的内存块链表组成一个内存堆，相当于一个栈，在栈顶分配（添加新的内存块）和释放内存
 /* The info structure stored at the beginning of a heap block */
 typedef struct mem_block_info_struct mem_block_info_t;
 
@@ -60,7 +60,12 @@ mem_init(
 	ulint	size);	/* in: common pool size in bytes */
 /******************************************************************
 Use this macro instead of the corresponding function! Macro for memory
-heap creation. */
+heap creation.
+ 定义创建不同类型内存堆的宏
+ ：MEM_HEAP_DYNCMIC: 从通用内存池中申请内存块
+   MEM_HEAP_BUFFER: 从缓冲池中申请内存块
+   MEM_HEAP_IN_BRT_SEARCH: MEM_HEAP_BUFFER的子类，仅在自适应哈希索引中使用
+ */
 
 #define mem_heap_create(N)    mem_heap_create_func(\
 						(N), NULL, MEM_HEAP_DYNAMIC,\
@@ -281,19 +286,19 @@ mem_validate_all_blocks(void);
 
 /*#######################################################################*/
 	
-/* The info header of a block in a memory heap */
-
+/* The info header of a memory block in a memory heap */
+// 内存块的元数据信息
 struct mem_block_info_struct {
 	ulint   magic_n;/* magic number for debugging */
-	char	file_name[8];/* file name where the mem heap was created */
+	char	file_name[8];/* file name where the mem heap was created,创建该内存块的代码文件名 */
 	ulint	line;	/* line number where the mem heap was created */
 	UT_LIST_BASE_NODE_T(mem_block_t) base; /* In the first block in the
 			the list this is the base node of the list of blocks;
-			in subsequent blocks this is undefined */
+			in subsequent blocks this is undefined，链接内存堆中各内存块的链表基节点 */
 	UT_LIST_NODE_T(mem_block_t) list; /* This contains pointers to next
 			and prev in the list. The first block allocated
 			to the heap is also the first block in this list,
-			though it also contains the base node of the list. */
+			though it also contains the base node of the list.链接内存堆中各内存块的链表节点 */
 	ulint   len;    /* physical length of this block in bytes */
 	ulint 	type; 	/* type of heap: MEM_HEAP_DYNAMIC, or
 			MEM_HEAP_BUF possibly ORed to MEM_HEAP_BTR_SEARCH */

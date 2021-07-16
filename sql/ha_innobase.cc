@@ -440,7 +440,7 @@ innobase_init(void)
 	srv_use_native_aio = 0;
 
 	srv_pool_size = (ulint) innobase_buffer_pool_size;
-	srv_mem_pool_size = (ulint) innobase_additional_mem_pool_size;
+	srv_mem_pool_size = (ulint) innobase_additional_mem_pool_size; // innodb通用内存池大小
 
 	srv_n_file_io_threads = (ulint) innobase_file_io_threads;
 

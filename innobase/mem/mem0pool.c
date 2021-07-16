@@ -82,11 +82,15 @@ pool, and after that its locks will grow into the buffer pool. */
 /* Data structure for a memory pool. The space is allocated using the buddy
 algorithm, where free list i contains areas of size 2 to power i. */
 struct mem_pool_struct{
-	byte*		buf;		/* memory pool */
+	byte*		buf;		/* memory pool,从OS分配到的内存 */
 	ulint		size;		/* memory common pool size */
 	ulint		reserved;	/* amount of currently allocated
 					memory */
 	mutex_t		mutex;		/* mutex protecting this struct */
+	// 内存池伙伴算法（解决外部碎片）的mem_area_t链表基节点数组
+	// mem_area_t是内存池的内存管理单位
+	// 内存区的所有内存分组为64个内存区链表，每个链表分别包含大小为2^0, 2^1, ..., 2^64字节的内存区块
+	// 即free_list[0]是由大小为2^0B内存区块组成的链表；free_list[1]是由大小为2^1B的内存区块组成的内存链表
 	UT_LIST_BASE_NODE_T(mem_area_t)
 			free_list[64];	/* lists of free memory areas: an
 					area is put to the list whose number

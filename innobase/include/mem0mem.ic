@@ -372,7 +372,9 @@ mem_heap_free_top(
 NOTE: Use the corresponding macros instead of this function. Creates a
 memory heap which allocates memory from dynamic space. For debugging
 purposes, takes also the file name and line as argument in the debug
-version. */
+version.
+ 内存堆创建函数
+ */
 UNIV_INLINE
 mem_heap_t*
 mem_heap_create_func(
@@ -406,6 +408,7 @@ mem_heap_create_func(
 		block = mem_heap_create_block(NULL, n, init_block, type,
 							file_name, line);
 	} else {
+		// 创建默认大小内存块的内存堆
 		block = mem_heap_create_block(NULL, MEM_BLOCK_START_SIZE, 
 					init_block, type, file_name, line);
 	}

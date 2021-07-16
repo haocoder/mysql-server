@@ -17,6 +17,7 @@ typedef struct mem_area_struct	mem_area_t;
 typedef struct mem_pool_struct	mem_pool_t;
 
 /* The common memory pool */
+// 服务于用于动态内存分配的内存堆
 extern mem_pool_t*	mem_comm_pool;
 
 /* Memory area header */

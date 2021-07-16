@@ -1676,7 +1676,7 @@ srv_general_init(void)
 /*==================*/
 {
 	sync_init();
-	mem_init(srv_mem_pool_size);
+	mem_init(srv_mem_pool_size); // 创建通用内存池
 	thr_local_init();
 }
 
