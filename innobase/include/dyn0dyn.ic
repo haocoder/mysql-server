@@ -96,7 +96,9 @@ dyn_block_get_data(
 }
 
 /*************************************************************************
-Initializes a dynamic array. */
+Initializes a dynamic array.
+ 仅对数组中的第一个块进行初始化
+ */
 UNIV_INLINE
 dyn_array_t*
 dyn_array_create(

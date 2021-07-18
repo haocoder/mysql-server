@@ -29,7 +29,7 @@ dyn_array_add_block(
 	if (arr->heap == NULL) {
 		UT_LIST_INIT(arr->base);
 		UT_LIST_ADD_FIRST(list, arr->base, arr);
-
+		// 动态数组第一次添加block时，先创建一个内存堆对象初始化heap字段，并用于分配block
 		arr->heap = mem_heap_create(sizeof(dyn_block_t));
 	}	
 

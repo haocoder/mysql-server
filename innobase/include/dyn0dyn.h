@@ -145,11 +145,19 @@ dyn_push_string(
 
 /* NOTE! Do not use the fields of the struct directly: the definition
 appears here only for the compiler to know its size! */
+/*
+ * 动态数组的主要使用场景：mtr(mini-transaction)模块，用于保存mtr中的锁和修改的日志
+ * 动态数组块结构，通过链表的形式链接起来组成一个动态数组
+ */
 struct dyn_block_struct{
+	/*
+	 * 如果数组需要动态扩展，则数组第一个block的该字段为分配
+	 * 块空间所需的内存堆
+	 */
 	mem_heap_t*	heap;	/* in the first block this is != NULL 
 				if dynamic allocation has been needed */
 	ulint		used;	/* number of data bytes used in this block */
-	byte		data[DYN_ARRAY_DATA_SIZE];
+	byte		data[DYN_ARRAY_DATA_SIZE];  // 动态数组块固定大小数据区域
 				/* storage for array elements */	
 	UT_LIST_BASE_NODE_T(dyn_block_t) base;
 				/* linear list of dyn blocks: this node is
