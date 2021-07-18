@@ -430,7 +430,8 @@ or row lock! */
 /* NOTE! The structure appears here only for the compiler to know its size.
 Do not use its fields directly! The structure used in the spin lock
 implementation of a mutual exclusion semaphore. */
-
+// InnoDB没有直接使用OS提供的spin lock, 而是自己实现互斥数据结构（原因是
+// 在当时的环境下，OS提供的latch效率不高），也是通过test-and-set实现的
 struct mutex_struct {
 	ulint	lock_word;	/* This ulint is the target of the atomic
 				test-and-set instruction in Win32 */

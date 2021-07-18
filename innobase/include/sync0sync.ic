@@ -44,7 +44,7 @@ mutex_signal_object(
 
 /**********************************************************************
 Performs an atomic test-and-set instruction to the lock_word field of a
-mutex. */
+mutex. 用于判断mutex的状态，并加锁*/
 UNIV_INLINE
 ulint
 mutex_test_and_set(
@@ -230,7 +230,9 @@ mutex_exit(
 /**********************************************************************
 Locks a mutex for the current thread. If the mutex is reserved, the function
 spins a preset time (controlled by SYNC_SPIN_ROUNDS), waiting for the mutex
-before suspending the thread. */
+before suspending the thread.
+ 在线程挂起之前，先自旋一段时间等待锁
+ */
 UNIV_INLINE
 void
 mutex_enter_func(

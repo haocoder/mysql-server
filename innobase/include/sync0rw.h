@@ -399,7 +399,15 @@ simultaneously in this lock, but only one writer may have an exclusive lock,
 in which case no shared locks are allowed. To prevent starving of a writer
 blocked by readers, a writer may queue for the lock by setting the writer
 field. Then no new readers are allowed in. */
-
+// Innodb rw-lock的实现
+/*
+ * InnoDB在TAS(test-and-set)的基础之上实现了mutex，
+ * 并在mutex的基础之上又实现了rw-lock（来支持更高的读并发度）
+ * ，对于rw-lock, 其x-latch操作是允许递归的，而s-latch是
+ *  不允许进行递归的。
+ *  InnoDB实现mutex/rw-lock是对短临界区进行互斥访问。那么对于
+ *  长临界区呢？使用何种方式进行互斥访问？
+ */
 struct rw_lock_struct {
 	ulint	reader_count;	/* Number of readers who have locked this
 				lock in the shared mode */
