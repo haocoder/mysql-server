@@ -295,6 +295,9 @@ buf_frame_get_space_id(
 /**************************************************************************
 Gets the space id, page offset, and byte offset within page of a
 pointer pointing to a buffer frame containing a file page. */
+/*
+ * 获取内存缓冲池指针对应的磁盘文件地址(space id, page offset, byte offset within page)
+ */
 UNIV_INLINE
 void
 buf_ptr_get_fsp_addr(

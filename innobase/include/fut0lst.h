@@ -14,19 +14,40 @@ Created 11/28/1995 Heikki Tuuri
 #include "fil0fil.h"
 #include "mtr0mtr.h"
 
+/*
+ * 磁盘双链表： 用于组织磁盘文件数据
+ * 由于磁盘数据块设备无法像内存一样通过指针进行随机地址访问，
+ * 要访问某个磁盘数据，需要先将其对应的磁盘块读取到内存，再通过
+ * 块内的偏移位置最终定位所需的数据
+ * 使用场景：
+ *  1. 表空间管理模块
+ *  2. 事务处理模块
+ *  3. B树模块
+ *
+ *
+ */
 
 /* The C 'types' of base node and list node: these should be used to
 write self-documenting code. Of course, the sizeof macro cannot be
 applied to these types! */
 
-typedef	byte	flst_base_node_t;
-typedef	byte	flst_node_t;
+typedef	byte	flst_base_node_t;  // 基节点
+typedef	byte	flst_node_t;    // 节点链表
 
 /* The physical size of a list base node in bytes */
-#define	FLST_BASE_NODE_SIZE	(4 + 2 * FIL_ADDR_SIZE)
+/* 一个base node包含：
+ *  1. 一个表示链表节点个数的字段： 4个字节
+ *  2. 两个链接链表起始和末尾节点的指针： 2 * 6B
+ */
+#define	FLST_BASE_NODE_SIZE	(4 + 2 * FIL_ADDR_SIZE)  // 16B
 
 /* The physical size of a list node in bytes */
-#define	FLST_NODE_SIZE		(2 * FIL_ADDR_SIZE)
+/*
+ * 链表节点包含两个字段：
+ * 1. 指向前序节点的指针
+ * 2. 指向后继节点的指针
+ */
+#define	FLST_NODE_SIZE		(2 * FIL_ADDR_SIZE)     // 12B
 
 
 /************************************************************************

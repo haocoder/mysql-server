@@ -10,7 +10,10 @@ Created 11/28/1995 Heikki Tuuri
 #include "mtr0log.h"
 #include "buf0buf.h"
 
+// 磁盘双链表的宏定义
 /* We define the field offsets of a node for the list */
+// FLST_FIRST, FLST_LAST, FLST_PREV, FLST_NEXT保存的对象均为fil_addr_t
+// 定义链表node结构体中的各个字段偏移，分别是0, 6, 即prev指针和next指针在node结构体中的偏移
 #define FLST_PREV	0	/* 6-byte address of the previous list element;
 				the page part of address is FIL_NULL, if no
 				previous element */
@@ -19,6 +22,7 @@ Created 11/28/1995 Heikki Tuuri
 				is FIL_NULL, if no next element */
 
 /* We define the field offsets of a base node for the list */
+// 定义base node结构体中的各个字段偏移,分别是(0, 4, 10)，即长度字段、first指针、last指针在base node结构体中的偏移
 #define FLST_LEN	0	/* 32-bit list length field */
 #define	FLST_FIRST	4	/* 6-byte address of the first element
 				of the list; undefined if empty list */
@@ -28,6 +32,9 @@ Created 11/28/1995 Heikki Tuuri
 
 /************************************************************************
 Writes a file address. */
+/*
+ * 往fil_faddr_t对应的地址中写入一个文件地址
+ */
 UNIV_INLINE
 void
 flst_write_addr(
@@ -46,7 +53,9 @@ flst_write_addr(
 }
 
 /************************************************************************
-Reads a file address. */
+Reads a file address.
+ 从fil_faddr_t对应的地址中读取磁盘文件地址
+ */
 UNIV_INLINE
 fil_addr_t
 flst_read_addr(

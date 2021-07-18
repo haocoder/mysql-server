@@ -11,6 +11,9 @@ Created 12/13/1995 Heikki Tuuri
 
 /************************************************************************
 Gets a pointer to a file address and latches the page. */
+/*
+ * 获取磁盘文件地址fil_faddr_t在内存中的地址，并且对对应的page加latch锁
+ */
 UNIV_INLINE
 byte*
 fut_get_ptr(

@@ -22,21 +22,24 @@ Created 10/25/1995 Heikki Tuuri
 /* Space address data type; this is intended to be used when
 addresses accurate to a byte are stored in file pages. If the page part
 of the address is FIL_NULL, the address is considered undefined. */
-
+// 表示数据在磁盘中的位置，起到类似内存指针的作用，这里的地址指精确到字节
 typedef	byte	fil_faddr_t;	/* 'type' definition in C: an address
 				stored in a file page is a string of bytes */
+// fil_faddr_t由两部分组成，表示磁盘地址，前4个字节表示page在表空间中的偏移；
 #define FIL_ADDR_PAGE	0	/* first in address is the page offset */
+// 接下来的两个字节是数据在page内的字节偏移
 #define	FIL_ADDR_BYTE	4	/* then comes 2-byte byte offset within page*/
-
+// 一个磁盘地址占用6个字节
 #define	FIL_ADDR_SIZE	6	/* address size is 6 bytes */
 
 /* A struct for storing a space address FIL_ADDR, when it is used
 in C program data structures. */
 
 typedef struct fil_addr_struct	fil_addr_t;
+// 与fil_faddr_t对应的内存数据结构
 struct fil_addr_struct{
-	ulint	page;		/* page number within a space */
-	ulint	boffset;	/* byte offset within the page */
+	ulint	page;		/* page number within a space ， 对应FIL_ADDR_PAGE */
+	ulint	boffset;	/* byte offset within the page， 对应FIL_ADDR_BYTE */
 };
 
 /* Null file address */

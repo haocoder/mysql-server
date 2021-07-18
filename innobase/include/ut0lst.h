@@ -15,6 +15,22 @@ Created 9/10/1995 Heikki Tuuri
 if a list is used in the database. Note that a single struct may belong
 to two or more lists, provided that the list are given different names.
 An example of the usage of the lists can be found in fil0fil.c. */
+/*
+ * 内存双链表： 用于组织内存对象
+ * InnoDB内存双链表的实现：
+ * 1. 通过一系列宏定义优化代码执行效率
+ * 2. 双链表与被链接的数据对象类型无关，可支持各种数据类型
+ * 3. 双链表由两部分组成：
+ *  1. 链表基节点： UT_LIST_BASE_NODE_T(TYPE)
+ *  2. 节点链表： UT_LIST_NODE_T(TYPE)
+ *
+ * 4. 内存双链表使用场景：
+ *  1. 缓冲池模块
+ *  2. 事务处理模块
+ *  3. 锁模块
+ *  4. 文件系统模块
+ *  5. 等等
+ */
 
 /***********************************************************************
 This macro expands to the unnamed type definition of a struct which acts
@@ -44,7 +60,7 @@ struct LRU_node_struct {
 The example implements an LRU list of name LRU_list. Its nodes are of type
 LRU_node_t.
 */
-
+// UT_LIST_NODE_T是作为一个任意类型node（结构体）的一部分，记录node的前向和后续node
 #define UT_LIST_NODE_T(TYPE)\
 struct {\
 	TYPE *	prev;	/* pointer to the previous node,\
