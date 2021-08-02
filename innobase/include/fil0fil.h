@@ -59,7 +59,7 @@ extern fil_addr_t	fil_addr_null;
 #define FIL_PAGE_FILE_FLUSH_LSN	26	/* this is only defined for the
 					first page in a data file: the file
 					has been flushed to disk at least up
-					to this lsn */
+					to this lsn 该值记录了数据库关闭时最后刷新页的LSN */
 #define FIL_PAGE_ARCH_LOG_NO	34	/* this is only defined for the
 					first page in a data file: the latest
 					archived log file number when the

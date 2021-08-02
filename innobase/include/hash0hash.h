@@ -317,7 +317,7 @@ hash_mutex_exit_all(
 
 
 struct hash_cell_struct{
-	// 由于不同的哈希表实例需要保持各种不同类型的数据结构，
+	// 由于不同的哈希表实例需要保存各种不同类型的数据结构，
 	// 因此node是void*类型
 	void*	node;	/* hash chain node, NULL if none */
 };

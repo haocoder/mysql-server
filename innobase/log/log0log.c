@@ -1129,7 +1129,8 @@ This function is called, e.g., when a transaction wants to commit. It checks
 that the log has been flushed to disk up to the last log entry written by the
 transaction. If there is a flush running, it waits and checks if the flush
 flushed enough. If not, starts a new flush. */
-
+// 将重做日志缓冲刷新到重做日志文件。该函数也实现了事务的组提交(group commit)用于提高数据库
+// 事务提交时的性能
 void
 log_flush_up_to(
 /*============*/
@@ -1231,7 +1232,9 @@ loop:
 	/* Copy the last, incompletely written, log block a log block length
 	up, so that when the flush operation writes from the log buffer, the
 	segment to write will not be changed by writers to the log */
-	
+	/*
+	 * 复制最后一个重做日志块
+	 */
 	ut_memcpy(log_sys->buf + area_end,
 			log_sys->buf + area_end - OS_FILE_LOG_BLOCK_SIZE,
 			OS_FILE_LOG_BLOCK_SIZE);
@@ -1280,7 +1283,7 @@ log_flush_margin(void)
 	mutex_enter(&(log->mutex));
 
 	if (log->buf_free > log->max_buf_free) {
-		
+		// log buffer写入位置已经超过了最大位置，必须要刷日志到redo log file
 		if (log->n_pending_writes > 0) {
 			/* A flush is running: hope that it will provide enough
 			free space */
@@ -1584,7 +1587,7 @@ log_group_read_checkpoint_info(
 	ut_ad(mutex_own(&(log_sys->mutex)));
 
 	log_sys->n_log_ios++;
-	
+	// 读取redo log file header中检查块中最大lsn号写入log_sys->checkpoint_buf
 	fil_io(OS_FILE_READ | OS_FILE_LOG, TRUE, group->space_id,
 			field / UNIV_PAGE_SIZE, field % UNIV_PAGE_SIZE,
 			OS_FILE_LOG_BLOCK_SIZE, log_sys->checkpoint_buf, NULL);
@@ -1615,7 +1618,9 @@ Makes a checkpoint. Note that this function does not flush dirty
 blocks from the buffer pool: it only checks what is lsn of the oldest
 modification in the pool, and writes information about the lsn in
 log files. Use log_make_checkpoint_at to flush also the pool. */
-
+/*
+ * 仅仅将buffer pool中脏页的最旧的lsn写入重做日志文件头部，而不进行脏页的刷新
+ */
 ibool
 log_checkpoint(
 /*===========*/
@@ -2697,7 +2702,10 @@ Checks that there is enough free space in the log to start a new query step.
 Flushes the log buffer or makes a new checkpoint if necessary. NOTE: this
 function may only be called if the calling thread owns no synchronization
 objects! */
-
+/*
+ * 检查重做日志缓冲空间大小、检脏页列表、检查点，并在达到相应阈值条件时刷新Log buffer
+ * 或执行checkpoint,以便有足够的空间供新的查询使用
+ */
 void
 log_check_margins(void)
 /*===================*/

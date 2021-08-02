@@ -436,7 +436,7 @@ recv_find_max_checkpoint(
 	
 	while (group) {
 		group->state = LOG_GROUP_CORRUPTED;
-	
+		// 读取redo log file header中的最大的checkpoint lsn
 		for (field = LOG_CHECKPOINT_1; field <= LOG_CHECKPOINT_2;
 				field += LOG_CHECKPOINT_2 - LOG_CHECKPOINT_1) {
 	
@@ -2270,7 +2270,8 @@ recv_recovery_from_checkpoint_start(
 	mutex_enter(&(log_sys->mutex));
 
 	/* Look for the latest checkpoint from any of the log groups */
-	
+	// 1. 第一步查找检查点值，redo log file header中有两个checkpoint block保存检查点值，
+	// 需要找到包含最大checkpoint lsn的那个checkpoint block
 	err = recv_find_max_checkpoint(&max_cp_group, &max_cp_field);
 
 	if (err != DB_SUCCESS) {
@@ -2282,7 +2283,7 @@ recv_recovery_from_checkpoint_start(
 		
 	log_group_read_checkpoint_info(max_cp_group, max_cp_field);
 
-	buf = log_sys->checkpoint_buf;
+	buf = log_sys->checkpoint_buf;  // checkpoint block in redo log file header
 
 	checkpoint_lsn = mach_read_from_8(buf + LOG_CHECKPOINT_LSN);
 	checkpoint_no = mach_read_from_8(buf + LOG_CHECKPOINT_NO);

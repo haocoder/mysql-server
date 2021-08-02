@@ -476,7 +476,7 @@ Prints info of the log. */
 void
 log_print(void);
 /*===========*/
-
+// 全局变量，表示重做日志缓冲
 extern log_t*	log_sys;
 
 /* Values used as flags */
@@ -484,13 +484,41 @@ extern log_t*	log_sys;
 #define LOG_CHECKPOINT	78656949
 #define LOG_ARCHIVE	11122331
 #define LOG_RECOVER	98887331
-
+/*
+ * LSN表示重做日志的序列号，但是其存在于多个对象中，表示的含义各不相同：
+ * 1. 重做日志LSN： 重做日志缓冲和重做日志文件
+ * 2. 检查点LSN：检查点也通过LSN的形式来保存，其表示页已经刷新到磁盘的LSN位置，即表示最新
+ * 一次页刷新到磁盘时，其LSN的值是多少，如果buffer pool中某个页的LSN号比检查点LSN号更大，则说明改页的修改还没有被刷新到磁盘。
+ * 页的刷新是异步的，当前数据库通常使用检查点技术来刷新页，缩短数据库恢复时间，避免重做太多的redo log。检查点的值是根据LSN记录的。
+ *    2.1 sharp checkpoint: 将缓冲池中的脏页，全部刷新到磁盘，硬性数据库可用性
+ *    2.2 fuzzy checkpoint: 将脏页慢慢刷到磁盘，大大提高数据库可用性。但是需要将脏页根据第一次被修改时的LSN进行排序，
+ *    然后将最老的页先刷回到磁盘，这使得页的刷新和日志的LSN顺序是一样的。从而保证恢复操作的正确性。
+ * 3. 页LSN：每个页的头部，有一个值FIL_PAGE_LSN，记录了页的LSN,表示该页最后刷新时的LSN的大小
+ * LSN表示事务写入到重做日志的字节总量
+ * 由于InnoDB首先将重做日志写入到重做日志缓冲中，因此存在已经写入到重做日志
+ * 缓冲和重做日志文件的两部分LSN信息。
+ */
 /* The counting of lsn's starts from this value: this must be non-zero */
+// LSN的初始值
 #define LOG_START_LSN	ut_dulint_create(0, 16 * OS_FILE_LOG_BLOCK_SIZE)
 
 #define LOG_BUFFER_SIZE 	(srv_log_buffer_size * UNIV_PAGE_SIZE)
 #define LOG_ARCHIVE_BUF_SIZE	(srv_log_buffer_size * UNIV_PAGE_SIZE / 4)
 
+/*
+ * 重做日志以512字节大小的redo log block进行存储（包括重做日志缓冲、重做日志文件）
+ * redo log block大小和磁盘扇区大小一样，都是512B，因此可以保证重做日志块的写入是原子性的，不需要double write技术
+ * redo log block包括三部分：
+ *      1. log block header(12B)
+ *      2. log body(492B)
+ *      3. log block tailer(8B)
+ * redo log buffer中的log block根据一定规则刷新到磁盘：
+ *      1. 事务提交时
+ *      2. 写入检查点值时
+ *      3. log buffer中已使用空间超过某个阈值时
+ *  log block是通过追加(append-only)的方式写入到redo log file中
+ *
+ */
 /* Offsets of a log block header */
 #define	LOG_BLOCK_HDR_NO	0	/* block number which must be > 0 and
 					is allowed to wrap around at 2G; the
@@ -502,7 +530,8 @@ extern log_t*	log_sys;
 					the preceding field */
 #define	LOG_BLOCK_HDR_DATA_LEN	4	/* number of bytes of log written to
 					this block */
-#define	LOG_BLOCK_FIRST_REC_GROUP 6	/* offset of the first start of an
+#define	LOG_BLOCK_FIRST_REC_GROUP 6	/* 该block中第一个日志起始偏移量
+ *                  offset of the first start of an
 					mtr log record group in this log block,
 					0 if none; if the value is the same
 					as LOG_BLOCK_HDR_DATA_LEN, it means
@@ -527,8 +556,18 @@ extern log_t*	log_sys;
 #define	LOG_BLOCK_TRL_SIZE	4	/* trailer size in bytes */
 
 /* Offsets for a checkpoint field */
-#define LOG_CHECKPOINT_NO		0
-#define LOG_CHECKPOINT_LSN		8
+/*
+ * redo log file header中checkpoint block中字段信息偏移
+ */
+#define LOG_CHECKPOINT_NO		0       // 单调递增的值，每次checkpoint操作完成后进行递增操作
+#define LOG_CHECKPOINT_LSN		8       // checkpoint值, LSN小于等于该值的页都已经被写入到磁盘
+/*
+ *   LOG_CHECKPOINT_OFFSET表示当前checkpoint LSN在重做日志中对应的偏移量。
+ *   因为redo log可以看做是一个大小数组，每个数组元素都是512字节的log block
+ *   而LSN代表字节数，即写入到redo log中的日志量。因此通过LSN就能定位到它在数据中的位置，
+ *   简单算法就是LSN/512。但实际考虑到redo log file有2KB的log file，计算方式有些不同，
+ *   具体实现函数是log_group_calc_lsn_offset
+ */
 #define LOG_CHECKPOINT_OFFSET		16
 #define LOG_CHECKPOINT_LOG_BUF_SIZE	20
 #define	LOG_CHECKPOINT_ARCHIVED_LSN	24
@@ -554,13 +593,16 @@ extern log_t*	log_sys;
 
 #define LOG_CHECKPOINT_FSP_MAGIC_N_VAL	1441231243
 
+/*
+ *  每个redo log file都有一个大小为2KB的header
+ */
 /* Offsets of a log file header */
 #define LOG_GROUP_ID		0	/* log group number */
 #define LOG_FILE_START_LSN	4	/* lsn of the start of data in this
 					log file */
 #define LOG_FILE_NO		12	/* 4-byte archived log file number */
 #define	LOG_FILE_ARCH_COMPLETED	OS_FILE_LOG_BLOCK_SIZE
-					/* this 4-byte field is TRUE when
+					/* this 4-byte field is TRUE whenF
 					the writing of an archived log file
 					has been completed */
 #define LOG_FILE_END_LSN	(OS_FILE_LOG_BLOCK_SIZE + 4)
@@ -571,8 +613,15 @@ extern log_t*	log_sys;
 					same log block as this lsn; this field
 					is defined only when an archived log
 					file has been completely written */
-#define LOG_CHECKPOINT_1	OS_FILE_LOG_BLOCK_SIZE
-#define LOG_CHECKPOINT_2	(3 * OS_FILE_LOG_BLOCK_SIZE)
+
+/* 两个512字节的区域保存checkpoint值，它们交替写入，目的是为了避免介质失败，
+ * 导致无法找到可用的checkpoint
+ * 在恢复时，需要读取这两个checkpoint block中的checkpoint值，并且仅恢复
+ * LSN大于最大checkpoint的重做日志，这个过程通过函数recv_find_max_checkpoint实现。
+ * checkpoint block中的数据信息参见上述offset描述
+*/
+#define LOG_CHECKPOINT_1	OS_FILE_LOG_BLOCK_SIZE          // 第一个checkpoint block在 log file header中的偏移， checkpoint block = 512B
+#define LOG_CHECKPOINT_2	(3 * OS_FILE_LOG_BLOCK_SIZE)    // 第一个checkpoint block在 log file header中的偏移， checkpoint block = 512B
 #define LOG_FILE_HDR_SIZE	(4 * OS_FILE_LOG_BLOCK_SIZE)
 
 #define LOG_GROUP_OK		301
@@ -626,24 +675,82 @@ struct log_group_struct{
 			log_groups;	/* list of log groups */
 };	
 
+/*
+ * InnoDB中的各种LSN:
+ *  1. 页lsn: buffer pool flush list中的页按照最早修改的lsn号排序
+ *  2. 重做日志缓冲lsn: 记录了已经写入到缓冲区的日志的lsn
+ *  3. 重做日志文件lsn: 已经写入到日志文件的lsn
+ *  4. checkpoint lsn:
+ *
+ * 各种LSN距离的定义：
+ *   1. modified_age: 重做日志缓冲lsn与脏页列表的lsn(脏页列表中最小的lsn)的距离，即 lsn - buf_pool_get_oldest_modification()
+ *   2. checkpoint_age: 重做日志缓冲lsn与重做日志checkpoint值的lsn距离，即 lsn - last_checkpoint_lsn
+ *
+ *  InnoDB定义各种阈值来触发一些操作：
+ *  see log_checkpoint_margin()函数如何检测这些lsn距离;
+ *  1. max_modified_age_async(mmaa)：
+ *       mmaa ≈ 7/8 x total_redo_log_file_size;
+ *       if(modified_age > mmaa ) {
+ *          // 有太多脏页没有刷
+ *          异步刷新脏页，这时仅阻塞当前用户线程
+ *       }
+ *
+ *  2. max_modified_age_sync(mmac):
+ *        mmac ≈ 15/16 x total_redo_log_file_size;
+ *        if(modified_age > mmac) {
+ *           // 同步刷新脏页，阻塞所有用户线程
+ *        }
+ *  3. max_checkpoint_age_async(mcaa):
+ *     mcaa ≈ 31/32 x total_redo_log_file_size;
+ *     if (checkpoint_age > mcaa) {
+ *          // 异步执行checkpoint
+ *     }
+ *
+ *  4. max_checkpoint_age(mca):
+ *      if (checkpoint_age > mca) {
+ *          // 执行同步checkpoint
+ *      }
+ *                              buffer pool flush list
+ *      oldest modification lsn
+ *      ↓
+ *      ———————————————————————————————————————————————————————————————————————————————
+ *      page -> page -> page -> page -> ... -> page -> page -> page
+ *      ———————————————————————————————————————————————————————————————————————————————
+ *                                redo log buffer
+*                 buf_next_to_write             buf_free                max_buf_free
+ *                ↓                             ↓                       ↓
+ *     +——————————+———————————+———————————+—————+———————————+———————————+———————————+———————————+—————+
+ *     |log block | log block | log block | ... | log block | log block | log block | log block | ... |
+ *     |——————————+———————————+———————————+—————+———————————+———————————+———————————+———————————+—————+
+ *                                 redo log file
+ *
+ *
+ *
+ */
 struct log_struct{
 	byte		pad[64];	/* padding to prevent other memory
 					update hotspots from residing on the
 					same memory cache line */
-	dulint		lsn;		/* log sequence number */
+	dulint		lsn;		/* log sequence number 重做日志缓冲的lsn*/
 	ulint		buf_free;	/* first free offset within the log
-					buffer */
-	mutex_t		mutex;		/* mutex protecting the log */
+					buffer 当前已经写入到重做日志缓冲的位置，若大于max_buf_free,则会强制进行一次写入重做日志文件的操作 */
+	/*
+	 * mutex：保护重做日志的并发操作, 因此是一个资源竞争的热点。所有重做日志
+	 * 的I/O操作都是异步的，这样可以提前释放log_sys->mutex。
+	 * 重做日志的刷新都是先写入到操作系统缓存，然后进行fsync操作刷到磁盘。进行
+	 * fsync时，释放log_sys->mutex所持有的保护
+	 */
+	mutex_t		mutex;		/* mutex protecting the log  */
 	byte*		buf;		/* log buffer */
 	ulint		buf_size;	/* log buffer size in bytes */
 	ulint		max_buf_free;	/* recommended maximum value of
 					buf_free, after which the buffer is
-					flushed */
+					flushed 最大可使用空间，日志写入到这个位置，就要刷新缓冲区 */
 	ulint		old_buf_free;	/* value of buf free when log was
 					last time opened; only in the debug
-					version */
+					version 上一次写入重做日志的位置 */
 	dulint		old_lsn;	/* value of lsn when log was last time
-					opened; only in the debug version */
+					opened; only in the debug version 上次写入重做日志的LSN */
 	ibool		check_flush_or_checkpoint;
 					/* this is set to TRUE when there may
 					be need to flush the log buffer, or
@@ -652,7 +759,11 @@ struct log_struct{
 					lsn - last_checkpoint_lsn >
 					max_checkpoint_age; this flag is
 					peeked at by log_free_check(), which
-					does not reserve the log mutex */
+					does not reserve the log mutex
+					 若需要刷新重做日志到文件，或者刷新buffer pool脏页，
+					 或者进行checkpoint，该变量就设置为true。
+					 当lsn - last_checkpoint_lsn > max_checkpoint_age时，该变量一定要设置为true，并做checkpoint
+					 */
 	UT_LIST_BASE_NODE_T(log_group_t)
 			log_groups;	/* log groups */
 
@@ -664,7 +775,7 @@ struct log_struct{
 					offset of a log record catenated
 					later; this is advanced when a flush
 					operation is completed to all the log
-					groups */
+					groups 表示从这个位置开始的重做日志缓冲还未被写入到重做日志文件 */
 	dulint		written_to_some_lsn;
 					/* first log sequence number not yet
 					written to any log group; for this to
@@ -677,19 +788,19 @@ struct log_struct{
 					be advanced, it is enough that the
 					write i/o has been completed for all
 					log groups */
-	dulint		flush_lsn;	/* end lsn for the current flush */
+	dulint		flush_lsn;	/* end lsn for the current flush 已经写入到重做日志文件的LSN */
 	ulint		flush_end_offset;/* the data in buffer ha been flushed
 					up to this offset when the current
 					flush ends: this field will then
-					be copied to buf_next_to_write */
+					be copied to buf_next_to_write 已经写入到重做日志文件的偏移量 */
 	ulint		n_pending_writes;/* number of currently pending flush
-					writes */
+					writes 当前正在进行的异步写入刷新Log buffer的操作数 */
 	os_event_t	no_flush_event;	/* this event is in the reset state
 					when a flush is running; a thread
 					should wait for this without owning
 					the log mutex, but NOTE that to set or
 					reset this event, the thread MUST own
-					the log mutex! */
+					the log mutex! 等待异步I/O写入到重做日志文件的事件 */
 	ibool		one_flushed;	/* during a flush, this is first FALSE
 					and becomes TRUE when one log group
 					has been flushed */
@@ -703,23 +814,23 @@ struct log_struct{
 					event, the thread MUST own the log
 					mutex! */
 	ulint		n_log_ios;	/* number of log i/os initiated thus
-					far */
+					far 已经发生的重做日志I/O操作次数 */
 	ulint		n_log_ios_old;	/* number of log i/o's at the
-					previous printout */
+					previous printout 上次写入重做日志文件时， 已经发生的重做日志I/O操作次数 */
 	time_t		last_printout_time;/* when log_print was last time
 					called */
 
 	/* Fields involved in checkpoints */
 	ulint		max_modified_age_async;
-					/* when this recommended value for lsn
-					- buf_pool_get_oldest_modification()
+					/* when this recommended value for
+					 lsn - buf_pool_get_oldest_modification()
 					is exceeded, we start an asynchronous
-					preflush of pool pages */
+					preflush of pool pages 异步刷新脏页的距离 */
 	ulint		max_modified_age_sync;
-					/* when this recommended value for lsn
-					- buf_pool_get_oldest_modification()
+					/* when this recommended value for
+					 * lsn - buf_pool_get_oldest_modification()
 					is exceeded, we start a synchronous
-					preflush of pool pages */
+					preflush of pool pages 同步刷新脏页的距离 */
 	ulint		adm_checkpoint_interval;
 					/* administrator-specified checkpoint
 					interval in terms of log growth in
@@ -728,26 +839,27 @@ struct log_struct{
 	ulint		max_checkpoint_age_async;
 					/* when this checkpoint age is exceeded
 					we start an asynchronous writing of a
-					new checkpoint */
+					new checkpoint 执行异步checkpoint的距离 */
 	ulint		max_checkpoint_age;
 					/* this is the maximum allowed value
 					for lsn - last_checkpoint_lsn when a
-					new query step is started */
+					new query step is started 同步执行checkpoint的距离 */
 	dulint		next_checkpoint_no;
-					/* next checkpoint number */
+					/* next checkpoint number 下一次检查点编号 */
 	dulint		last_checkpoint_lsn;
-					/* latest checkpoint lsn */
+					/* latest checkpoint lsn   上一次检查点时的LSN */
 	dulint		next_checkpoint_lsn;
-					/* next checkpoint lsn */
+					/* next checkpoint lsn 下一次检查点时的LSN */
 	ulint		n_pending_checkpoint_writes;
 					/* number of currently pending
 					checkpoint writes */
 	rw_lock_t	checkpoint_lock;/* this latch is x-locked when a
 					checkpoint write is running; a thread
 					should wait for this without owning
-					the log mutex */
+					the log mutex  x-latch, 用来实现同步或异步的检查点操作*/
 	byte*		checkpoint_buf;	/* checkpoint header is read to this
-					buffer */
+					buffer
+					redo log file header中的checkpoint块信息会被读进这个buffer  */
 	/* Fields involved in archiving */
 	ulint		archiving_state;/* LOG_ARCH_ON, LOG_ARCH_STOPPING
 					LOG_ARCH_STOPPED, LOG_ARCH_OFF */

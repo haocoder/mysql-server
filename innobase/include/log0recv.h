@@ -235,10 +235,15 @@ struct recv_data_struct{
 				/* the log record data is stored physically
 				immediately after this struct, max amount
 				RECV_DATA_BLOCK_SIZE bytes of it */
+				/*
+				 * 这里只定义了next变量，由于每个重做日志大小可能不同，因此这里
+				 * 采用动态内存分配技术
+				 */
 };
 
 /* Stored log record struct */
 typedef struct recv_struct	recv_t;
+// 某个page的日志记录，一条日志记录对应一个recv_t结构体，通过哈希表进行索引查找
 struct recv_struct{
 	byte		type;	/* log record type */
 	ulint		len;	/* log record body length in bytes */
@@ -258,6 +263,8 @@ struct recv_struct{
 
 /* Hashed page file address struct */
 typedef struct recv_addr_struct	recv_addr_t;
+// hash结构体，保存page的日志记录地址
+// 通过哈希索引的page, 存放对应(space, page_no)页中的重做日志记录recv_t
 struct recv_addr_struct{
 	ulint		state;	/* RECV_NOT_PROCESSED, RECV_BEING_PROCESSED,
 				or RECV_PROCESSED */
@@ -269,6 +276,31 @@ struct recv_addr_struct{
 };
 
 /* Recovery system data structure */
+// 管理重做日志的恢复操作
+/* hash table: 哈希key = (space, page_no)
+ *      hash_function(space, page_no) = bucket number
+ *  | bucket0 | -> | recv_addr_t| -> | recv_addr_t | -> | recv_addr_t |
+ *  | bucket1 | -> | recv_addr_t| -> | recv_addr_t | -> | recv_addr_t |
+ *  | bucket2 | -> | recv_addr_t| -> | recv_addr_t | -> | recv_addr_t |
+ *  | bucket3 | ......
+ *  | bucket4 | ......
+ *  | bucket5 | ......
+ *  | bucket6 | ......
+ *  | bucket7 | -> | recv_addr_t = {state, space, page_no, rec_list, addr_hash |
+ *                                                            ↓
+ *                                                         recv_t = |{type, len, data, start_lsn, end_lsn, rec_list} |
+ *                                                                                 ↕                          ↕
+ *                                                                             | next, body |               |recv_t|
+ *                                                                                ↕                          ↕
+ *                                                                             | next, body |               |recv_t|
+ *
+ *   总结：
+ *    要查找某个页(space, page_no)的日志记录：
+ *    1. 以(space, page_no)为哈希key在hash table “addr_hash”中查找这个page对应的recv_addr_t对象
+ *    2. 然后通过recv_addr_t中的rec_list找到该页的重做日志结构recv_t,如果该页有多条重做日志信息，则将多个recv_t通过链表链接起来
+ *    3. 每个数据结构recv_t中记录了一条重做日志的类型，长度，开始/结束Lsn, 重做日志数据(结构体是recv_data_t,每个recv_data_t对应的日志块最大长度为
+ *    16KB，对于大于该长度的重做日志，同样需要将日志块recv_data_t链接起来)
+ */
 typedef struct recv_sys_struct	recv_sys_t;
 struct recv_sys_struct{
 	mutex_t		mutex;	/* mutex protecting the fields apply_log_recs,
@@ -298,10 +330,10 @@ struct recv_sys_struct{
 				/* this is the lsn from which we were able to
 				start parsing log records and adding them to
 				the hash table; ut_dulint_zero if a suitable
-				start point not found yet */
+				start point not found yet 在恢复时初始值被设置为checkpoint lsn */
 	dulint		scanned_lsn;
 				/* the log data has been scanned up to this
-				lsn */
+				lsn   在恢复时初始值被设置为checkpoint lsn*/
 	ulint		scanned_checkpoint_no;
 				/* the log data has been scanned up to this
 				checkpoint number (lowest 4 bytes) */
@@ -310,7 +342,7 @@ struct recv_sys_struct{
 				buf */
 	dulint		recovered_lsn;
 				/* the log records have been parsed up to
-				this lsn */
+				this lsn   在恢复时初始值被设置为checkpoint lsn */
 	dulint		limit_lsn;/* recovery should be made at most up to this
 				lsn */
 	log_group_t*	archive_group;
@@ -318,7 +350,7 @@ struct recv_sys_struct{
 				archive is read */
 	mem_heap_t*	heap;	/* memory heap of log records and file
 				addresses*/
-	hash_table_t*	addr_hash;/* hash table of file addresses of pages */
+	hash_table_t*	addr_hash;/* hash table of file addresses of pages 哈希桶存放的是recv_addr_t数据结构 */
 	ulint		n_addrs;/* number of not processed hashed file
 				addresses in the hash table */
 };
